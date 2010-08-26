@@ -7,7 +7,10 @@ use 5.008;
 use Class::Accessor::Lite;
 use Cwd qw(getcwd);
 use File::Temp qw(tempdir);
+use IO::Socket::INET;
+use POSIX qw(WNOHANG);
 use Test::TCP qw(empty_port);
+use Time::HiRes qw(sleep);
 
 our $VERSION = '0.01';
 
@@ -50,7 +53,9 @@ sub start {
     my $self = shift;
     die "httpd is already running (pid:@{[$self->pid]})"
         if $self->pid;
+    # write configuration
     $self->write_conf();
+    # spawn httpd
     my $pid = fork;
     if (! defined $pid) {
         die "fork failed:$!";
@@ -59,6 +64,20 @@ sub start {
         $ENV{PATH} = join(':', $ENV{PATH}, $self->search_paths);
         exec 'httpd', '-X', '-D', 'FOREGROUND', '-f', $self->conf_file;
         die "failed to exec httpd:$!";
+    }
+    # wait until the port becomes available
+    while (1) {
+        my $sock = IO::Socket::INET->new(
+            PeerAddr => do {
+                $self->listen =~ /:/
+                    ? $self->listen : "127.0.0.1:@{[$self->listen]}",
+                },
+            Proto    => 'tcp',
+        ) and last;
+        if (waitpid($pid, WNOHANG) == $pid) {
+            die "httpd failed to start, exitted with rc=$?";
+        }
+        sleep 0.1;
     }
     $self->pid($pid);
 }
@@ -84,7 +103,6 @@ Listen @{[$self->listen]}
 
 @{[$self->custom_conf]}
 EOT
-    warn $self->conf_file;
     open my $fh, '>', $self->conf_file
         or die "failed to open file:@{[$self->conf_file]}:$!";
     print $fh $conf;
