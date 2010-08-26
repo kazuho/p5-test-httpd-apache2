@@ -14,18 +14,40 @@ use POSIX qw(WNOHANG);
 use Test::TCP qw(empty_port);
 use Time::HiRes qw(sleep);
 
+use constant PATH_SEP => $^O eq 'MSWin32' ? ';' : ':';
+
 our $VERSION = '0.03';
 
 our %Defaults = (
-    auto_start       => 1,
-    pid              => undef,
-    listen           => undef,
-    required_modules => [],
-    server_root      => undef,
-    tmpdir           => undef,
-    custom_conf      => '',
-    search_paths     => [ qw(/usr/sbin /usr/local/sbin /usr/local/apache/bin) ],
+    auto_start         => 1,
+    pid                => undef,
+    listen             => undef,
+    required_modules   => [],
+    server_root        => undef,
+    tmpdir             => undef,
+    custom_conf        => '',
+    search_paths       => [
+        qw(/usr/sbin /usr/local/sbin /usr/local/apache/bin)
+    ],
+    _fallback_dso_path => '',
 );
+
+if ($^O eq 'MSWin32') {
+    require Win32::Process;
+    Win32::Process->import;
+    my @cand_paths = map { $_ =~ s!/httpd\.exe$!!; $_ }
+        glob('C:/progra~1/apach*/apach*/bin/httpd.exe');
+    if (@cand_paths) {
+        # use the latest version, if any
+        my $path = $cand_paths[-1];
+        unshift @{$Defaults{search_paths}}, $path;
+        my $dso_path = $path;
+        $dso_path =~ s!/bin$!/modules!;
+        if (-d $dso_path) {
+            $Defaults{_fallback_dso_path} = $dso_path;
+        }
+    }
+}
 
 Class::Accessor::Lite->mk_accessors(keys %Defaults);
 
@@ -64,7 +86,7 @@ sub start {
         die "fork failed:$!";
     } elsif ($pid == 0) {
         # child process
-        $ENV{PATH} = join(':', $ENV{PATH}, @{$self->search_paths});
+        $ENV{PATH} = join(PATH_SEP, $ENV{PATH}, @{$self->search_paths});
         exec 'httpd', '-X', '-D', 'FOREGROUND', '-f', $self->conf_file;
         die "failed to exec httpd:$!";
     }
@@ -82,6 +104,15 @@ sub start {
         }
         sleep 0.1;
     }
+    # need to override pid on mswin32
+    if ($^O eq 'MSWin32') {
+        my $pidfile = "@{[$self->tmpdir]}/httpd.pid";
+        open my $fh, '<', $pidfile
+            or die "failed to open $pidfile:$!";
+        $pid = <$fh>;
+        chomp $pid;
+        warn "pid: $pid";
+    };
     $self->pid($pid);
 }
 
@@ -89,8 +120,13 @@ sub stop {
     my $self = shift;
     die "httpd is not running"
         unless $self->pid;
-    kill 'TERM', $self->pid;
-    while (waitpid($self->pid, 0) != $self->pid) {
+    if ($^O eq 'MSWin32') {
+        Win32::Process::KillProcess($self->pid, 0);
+        sleep 1;
+    } else {
+        kill 'TERM', $self->pid;
+        while (waitpid($self->pid, 0) != $self->pid) {
+        }
     }
     $self->pid(undef);
 }
@@ -118,7 +154,9 @@ sub build_conf {
     my $conf = << "EOT";
 ServerRoot @{[$self->server_root]}
 PidFile @{[$self->tmpdir]}/httpd.pid
-LockFile @{[$self->tmpdir]}/httpd.lock
+<IfModule !mpm_winnt_module>
+  LockFile @{[$self->tmpdir]}/httpd.lock
+</IfModule>
 ErrorLog @{[$self->tmpdir]}/error_log
 Listen @{[$self->listen]}
 $load_modules
@@ -144,7 +182,8 @@ sub conf_file {
 sub get_static_modules {
     my $self = shift;
     return $self->{_static_modules} ||= do {
-        my $lines = $self->_read_cmd('httpd', '-l');
+        my $lines = $self->_read_cmd('httpd', '-l')
+            or die 'dying due to previous error';
         my @mods;
         for my $line (split /\n/, $lines) {
             if ($line =~ /^\s+mod_(.*)\.c/) {
@@ -157,10 +196,20 @@ sub get_static_modules {
 
 sub get_dso_path {
     my $self = shift;
-    return undef
-        unless grep { $_ eq 'so' } @{$self->get_static_modules};
-    my $lines = $self->_read_cmd('apxs', '-q', 'LIBEXECDIR');
-    return (split /\n/, $lines)[0];
+    if (! exists $self->{_dso_path}) {
+        $self->{_dso_path} = sub {
+            return undef
+                unless grep { $_ eq 'so' } @{$self->get_static_modules};
+            if (my $lines = $self->_read_cmd('apxs', '-q', 'LIBEXECDIR')) {
+                return (split /\n/, $lines)[0];
+            } elsif (my $p = $self->_fallback_dso_path) {
+                warn "failed to obtain LIBEXECDIR from apxs, falling back to @{[$self->_fallback_dso_path]}";
+                return $p;
+            }
+            die "failed to determine the apache modules directory";
+        }->();
+    }
+    return $self->{_dso_path};
 }
 
 sub get_dynamic_modules {
@@ -180,20 +229,18 @@ sub get_dynamic_modules {
 sub _read_cmd {
     my ($self, @cmd) = @_;
     my ($rfh, $wfh);
-    my $pid = open2(
-        $rfh,
-        $wfh,
-        'env',
-        join(':', "PATH=$ENV{PATH}", @{$self->search_paths}),
-        @cmd,
-    ) or die "failed to run @{[join ' ', @cmd]}:$!";
+    local $ENV{PATH} = join PATH_SEP, $ENV{PATH}, @{$self->search_paths};
+    my $pid = open2($rfh, $wfh, @cmd)
+        or die "failed to run @{[join ' ', @cmd]}:$!";
     close $wfh;
     my $lines = do { local $/; join '', <$rfh> };
     close $rfh;
     while (waitpid($pid, 0) != $pid) {
     }
-    die "$cmd[0] exitted with a non-zero value:$?"
-        if $? != 0;
+    if ($? != 0) {
+        warn "$cmd[0] exitted with a non-zero value:$?";
+        return;
+    }
     return $lines;
 }
 
