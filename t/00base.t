@@ -12,8 +12,7 @@ use_ok('Test::Httpd::Apache2');
         split(':', $ENV{PATH}),
         @{$Test::Httpd::Apache2::Defaults{search_paths}},
     );
-    my $httpd = $^O eq 'MSWin32' ? 'httpd.exe' : 'httpd';
-    if (! grep { -x "$_/$httpd" } @paths) {
+    if (! grep { -x "$_/httpd" || -x "$_/httpd.exe" || -x  "$_/apache2" } @paths) {
         warn "httpd not found, skipping actual tests";
         goto DONE_TESTING;
     }
