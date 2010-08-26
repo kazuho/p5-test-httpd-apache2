@@ -57,7 +57,7 @@ if ($^O eq 'MSWin32') {
     );
     if (grep { -x "$_/$Defaults{httpd}" } @paths) {
         # found
-    } elsif (grep { -x "$_/apache2" && -x "$_/apxs2" } @paths) {
+    } elsif (grep { -x "$_/apache2" } @paths) {
         # debian / ubuntu have these alternative names
         $Defaults{httpd} = "apache2";
         $Defaults{apxs} = "apxs2";
