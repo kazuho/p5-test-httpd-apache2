@@ -46,6 +46,9 @@ FUNCTIONS
     "auth_basic_module" should be specified as "auth_basic". Default is an
     empty arrayref.
 
+    Note: "Authz_host" is automatically translated to "access" if the found
+    httpd is Apache/2.0.x for compatibility.
+
    search_paths
     Paths to look for the httpd server in addition to the PATH environment
     variable. The default is: /usr/sbin, /usr/local/sbin,

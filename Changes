@@ -1,5 +1,10 @@
 Revision history for Perl extension Test::Httpd::Apache2
 
+0.04
+	- add Win32 support (thanks to mattn)
+	- detect "apache2" and "apxs2" for Debian / Ubuntu compatibility
+	- automatically translate "mod_authz_host" to "mod_access" for Apache/2.0.x
+
 0.03
 	- skip tests when httpd cannot be located
 
