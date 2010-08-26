@@ -29,6 +29,8 @@ our %Defaults = (
     search_paths       => [
         qw(/usr/sbin /usr/local/sbin /usr/local/apache/bin)
     ],
+    httpd              => 'httpd',
+    apxs               => 'apxs',
     _fallback_dso_path => '',
 );
 
@@ -46,6 +48,19 @@ if ($^O eq 'MSWin32') {
         if (-d $dso_path) {
             $Defaults{_fallback_dso_path} = $dso_path;
         }
+    }
+} else {
+    # search for alternative names if necessary
+    my @paths = (
+        split(PATH_SEP, $ENV{PATH}),
+        @{$Defaults{search_paths}},
+    );
+    if (grep { -x "$_/$Defaults{httpd}" } @paths) {
+        # found
+    } elsif (grep { -x "$_/apache2" && -x "$_/apxs2" } @paths) {
+        # debian / ubuntu have these alternative names
+        $Defaults{httpd} = "apache2";
+        $Defaults{apxs} = "apxs2";
     }
 }
 
@@ -87,7 +102,7 @@ sub start {
     } elsif ($pid == 0) {
         # child process
         $ENV{PATH} = join(PATH_SEP, $ENV{PATH}, @{$self->search_paths});
-        exec 'httpd', '-X', '-D', 'FOREGROUND', '-f', $self->conf_file;
+        exec $self->httpd, '-X', '-D', 'FOREGROUND', '-f', $self->conf_file;
         die "failed to exec httpd:$!";
     }
     # wait until the port becomes available
@@ -182,7 +197,7 @@ sub conf_file {
 sub get_static_modules {
     my $self = shift;
     return $self->{_static_modules} ||= do {
-        my $lines = $self->_read_cmd('httpd', '-l')
+        my $lines = $self->_read_cmd($self->httpd, '-l')
             or die 'dying due to previous error';
         my @mods;
         for my $line (split /\n/, $lines) {
@@ -200,7 +215,7 @@ sub get_dso_path {
         $self->{_dso_path} = sub {
             return undef
                 unless grep { $_ eq 'so' } @{$self->get_static_modules};
-            if (my $lines = $self->_read_cmd('apxs', '-q', 'LIBEXECDIR')) {
+            if (my $lines = $self->_read_cmd($self->apxs, '-q', 'LIBEXECDIR')) {
                 return (split /\n/, $lines)[0];
             } elsif (my $p = $self->_fallback_dso_path) {
                 warn "failed to obtain LIBEXECDIR from apxs, falling back to @{[$self->_fallback_dso_path]}";
