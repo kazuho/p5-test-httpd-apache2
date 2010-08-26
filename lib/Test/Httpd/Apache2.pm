@@ -116,6 +116,9 @@ sub start {
         ) and last;
         if (waitpid($pid, WNOHANG) == $pid) {
             die "httpd failed to start, exitted with rc=$?";
+            if (open my $fh, '<', "@{[$self->tmpdir]}/error_log") {
+                print STDERR do { local $/; join '', <$fh> };
+            }
         }
         sleep 0.1;
     }
@@ -126,7 +129,6 @@ sub start {
             or die "failed to open $pidfile:$!";
         $pid = <$fh>;
         chomp $pid;
-        warn "pid: $pid";
     };
     $self->pid($pid);
 }
@@ -152,7 +154,12 @@ sub build_conf {
         my %static_mods = map { $_ => 1 } @{$self->get_static_modules};
         my %dynamic_mods = map { $_ => 1 } @{$self->get_dynamic_modules};
         my @mods_to_load;
+        my $httpd_ver = $self->get_httpd_version;
         for my $mod (@{$self->required_modules}) {
+            # rewrite authz_host => access for apache/2.0.x
+            if ($mod eq 'authz_host' && $self->get_httpd_version =~ m{2\.0\.}) {
+                $mod = 'access';
+            }
             if ($static_mods{$mod}) {
                 # no need to do anything
             } elsif ($dynamic_mods{$mod}) {
@@ -194,6 +201,17 @@ sub conf_file {
     return "@{[$self->tmpdir]}/httpd.conf";
 }
 
+sub get_httpd_version {
+    my $self = shift;
+    return $self->{_httpd_version} ||= do {
+        my $lines = $self->_read_cmd($self->httpd, '-v')
+            or die 'dying due to previous error';
+        $lines =~ m{Apache\/([0-9\.]+) }
+            or die q{failed to parse out version number from the output of "httpd -v"};
+        $1;
+    };
+}
+
 sub get_static_modules {
     my $self = shift;
     return $self->{_static_modules} ||= do {
@@ -215,13 +233,20 @@ sub get_dso_path {
         $self->{_dso_path} = sub {
             return undef
                 unless grep { $_ eq 'so' } @{$self->get_static_modules};
+            # first obtain the path
+            my $path;
             if (my $lines = $self->_read_cmd($self->apxs, '-q', 'LIBEXECDIR')) {
-                return (split /\n/, $lines)[0];
-            } elsif (my $p = $self->_fallback_dso_path) {
+                $path = (split /\n/, $lines)[0];
+            } elsif ($path = $self->_fallback_dso_path) {
                 warn "failed to obtain LIBEXECDIR from apxs, falling back to @{[$self->_fallback_dso_path]}";
-                return $p;
+            } else {
+                die "failed to determine the apache modules directory";
             }
-            die "failed to determine the apache modules directory";
+            # convert to shortname since SPs in path will let the glob fail
+            if ($^O eq 'MSWin32') {
+                $path = Win32::GetShortPathName($path);
+            }
+            return $path;
         }->();
     }
     return $self->{_dso_path};
@@ -306,6 +331,8 @@ Application-specific configuration passed that will be written to the configurat
 =head3 required_modules
 
 An arrayref to specify the required apache modules.  If any module are specified, C<Test::Httpd::Apache2> will check the list of statically-compiled-in and dynamically-aviable modules and load the necessary modules automatically.  Module names should be specified excluding the "mod_" prefix and ".so" suffix.  For example, C<auth_basic_module> should be specified as "auth_basic".  Default is an empty arrayref.
+
+Note: "Authz_host" is automatically translated to "access" if the found httpd is Apache/2.0.x for compatibility.
 
 =head3 search_paths
 
