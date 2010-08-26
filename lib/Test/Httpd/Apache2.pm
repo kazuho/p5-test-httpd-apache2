@@ -16,7 +16,7 @@ use Time::HiRes qw(sleep);
 
 our $VERSION = '0.02';
 
-my %Defaults = (
+our %Defaults = (
     auto_start       => 1,
     pid              => undef,
     listen           => undef,

@@ -6,6 +6,18 @@ use LWP::Simple;
 
 use_ok('Test::Httpd::Apache2');
 
+{ # skip if httpd cannot be found
+    no warnings qw(once);
+    my @paths = (
+        split(':', $ENV{PATH}),
+        @{$Test::Httpd::Apache2::Defaults{search_paths}},
+    );
+    if (! grep { -x "$_/httpd" } @paths) {
+        warn "httpd not found, skipping actual tests";
+        goto DONE_TESTING;
+    }
+}
+
 # start httpd
 my $httpd = Test::Httpd::Apache2->new(
     custom_conf => << 'EOT',
@@ -31,5 +43,5 @@ if (my @mods = @{$httpd->get_dynamic_modules}) {
 
 undef $httpd;
 
-
+DONE_TESTING:
 done_testing;
