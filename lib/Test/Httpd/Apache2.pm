@@ -6,8 +6,10 @@ use warnings;
 use 5.008;
 use Class::Accessor::Lite;
 use Cwd qw(getcwd);
+use File::Spec;
 use File::Temp qw(tempdir);
 use IO::Socket::INET;
+use IPC::Open2 qw(open2);
 use POSIX qw(WNOHANG);
 use Test::TCP qw(empty_port);
 use Time::HiRes qw(sleep);
@@ -15,13 +17,14 @@ use Time::HiRes qw(sleep);
 our $VERSION = '0.01';
 
 my %Defaults = (
-    auto_start   => 1,
-    pid          => undef,
-    listen         => undef,
-    server_root  => undef,
-    tmpdir       => undef,
-    custom_conf  => '',
-    search_paths => [ qw(/usr/sbin /usr/local/sbin /usr/local/apache/bin) ],
+    auto_start       => 1,
+    pid              => undef,
+    listen           => undef,
+    required_modules => [],
+    server_root      => undef,
+    tmpdir           => undef,
+    custom_conf      => '',
+    search_paths     => [ qw(/usr/sbin /usr/local/sbin /usr/local/apache/bin) ],
 );
 
 Class::Accessor::Lite->mk_accessors(keys %Defaults);
@@ -61,7 +64,7 @@ sub start {
         die "fork failed:$!";
     } elsif ($pid == 0) {
         # child process
-        $ENV{PATH} = join(':', $ENV{PATH}, $self->search_paths);
+        $ENV{PATH} = join(':', $ENV{PATH}, @{$self->search_paths});
         exec 'httpd', '-X', '-D', 'FOREGROUND', '-f', $self->conf_file;
         die "failed to exec httpd:$!";
     }
@@ -92,26 +95,106 @@ sub stop {
     $self->pid(undef);
 }
 
-sub write_conf {
+sub build_conf {
     my $self = shift;
+    my $load_modules = do {
+        my %static_mods = map { $_ => 1 } @{$self->get_static_modules};
+        my %dynamic_mods = map { $_ => 1 } @{$self->get_dynamic_modules};
+        my @mods_to_load;
+        for my $mod (@{$self->required_modules}) {
+            if ($static_mods{$mod}) {
+                # no need to do anything
+            } elsif ($dynamic_mods{$mod}) {
+                push @mods_to_load, $mod;
+            } else {
+                die "required module:$mod is not available";
+            }
+        }
+        my $dso_path = $self->get_dso_path;
+        $dso_path ? join('', map {
+            "LoadModule ${_}_module $dso_path/mod_${_}.so\n"
+        } @mods_to_load) : '';
+    };
     my $conf = << "EOT";
 ServerRoot @{[$self->server_root]}
 PidFile @{[$self->tmpdir]}/httpd.pid
-LockFile @{[$self->tmpdir]}/httpd.pid
+LockFile @{[$self->tmpdir]}/httpd.lock
 ErrorLog @{[$self->tmpdir]}/error_log
 Listen @{[$self->listen]}
+$load_modules
 
 @{[$self->custom_conf]}
 EOT
+    return $conf;
+}
+
+sub write_conf {
+    my $self = shift;
     open my $fh, '>', $self->conf_file
         or die "failed to open file:@{[$self->conf_file]}:$!";
-    print $fh $conf;
+    print $fh $self->build_conf;
     close $fh;
 }
 
 sub conf_file {
     my $self = shift;
     return "@{[$self->tmpdir]}/httpd.conf";
+}
+
+sub get_static_modules {
+    my $self = shift;
+    return $self->{_static_modules} ||= do {
+        my $lines = $self->_read_cmd('httpd', '-l');
+        my @mods;
+        for my $line (split /\n/, $lines) {
+            if ($line =~ /^\s+mod_(.*)\.c/) {
+                push @mods, $1;
+            }
+        }
+        \@mods;
+    };
+}
+
+sub get_dso_path {
+    my $self = shift;
+    return undef
+        unless grep { $_ eq 'so' } @{$self->get_static_modules};
+    my $lines = $self->_read_cmd('apxs', '-q', 'LIBEXECDIR');
+    return (split /\n/, $lines)[0];
+}
+
+sub get_dynamic_modules {
+    my $self = shift;
+    return $self->{_dynamic_modules} ||= do {
+        my @mods;
+        if (my $dir = $self->get_dso_path()) {
+            for my $n (glob "$dir/mod_*.so") {
+                $n =~ m|/mod_(.*?)\.so$|
+                    and push @mods, $1;
+            }
+        }
+        \@mods;
+    };
+}
+
+sub _read_cmd {
+    my ($self, @cmd) = @_;
+    my ($rfh, $wfh);
+    my $pid = open2(
+        $rfh,
+        $wfh,
+        'env',
+        join(':', "PATH=$ENV{PATH}", @{$self->search_paths}),
+        @cmd,
+    ) or die "failed to run @{[join ' ', @cmd]}:$!";
+    close $wfh;
+    my $lines = do { local $/; join '', <$rfh> };
+    close $rfh;
+    while (waitpid($pid, 0) != $pid) {
+    }
+    die "$cmd[0] exitted with a non-zero value:$?"
+        if $? != 0;
+    return $lines;
 }
 
 1;
@@ -157,6 +240,10 @@ The "ServerRoot" runtime directive.  Set to current working directory if omitted
 =head3 custom_conf
 
 Application-specific configuration passed that will be written to the configuration file of Apache.  Default is none.
+
+=head3 required_modules
+
+An arrayref to specify the required apache modules.  If any module are specified, C<Test::Httpd::Apache2> will check the list of statically-compiled-in and dynamically-aviable modules and load the necessary modules automatically.  Module names should be specified excluding the "mod_" prefix and ".so" suffix.  For example, C<auth_basic_module> should be specified as "auth_basic".  Default is an empty arrayref.
 
 =head3 search_paths
 

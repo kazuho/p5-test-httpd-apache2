@@ -37,6 +37,15 @@ FUNCTIONS
     Application-specific configuration passed that will be written to the
     configuration file of Apache. Default is none.
 
+   required_modules
+    An arrayref to specify the required apache modules. If any module are
+    specified, "Test::Httpd::Apache2" will check the list of
+    statically-compiled-in and dynamically-aviable modules and load the
+    necessary modules automatically. Module names should be specified
+    excluding the "mod_" prefix and ".so" suffix. For example,
+    "auth_basic_module" should be specified as "auth_basic". Default is an
+    empty arrayref.
+
    search_paths
     Paths to look for the httpd server in addition to the PATH environment
     variable. The default is: /usr/sbin, /usr/local/sbin,
