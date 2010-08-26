@@ -1,5 +1,8 @@
 Revision history for Perl extension Test::Httpd::Apache2
 
+0.03
+	- skip tests when httpd cannot be located
+
 0.02
 	- autoload the specified modules
 

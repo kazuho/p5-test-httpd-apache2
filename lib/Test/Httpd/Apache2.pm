@@ -14,7 +14,7 @@ use POSIX qw(WNOHANG);
 use Test::TCP qw(empty_port);
 use Time::HiRes qw(sleep);
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 our %Defaults = (
     auto_start       => 1,
