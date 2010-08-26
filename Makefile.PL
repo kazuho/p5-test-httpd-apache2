@@ -3,6 +3,7 @@ use inc::Module::Install;
 
 name 'Test-Httpd-Apache2';
 all_from 'lib/Test/Httpd/Apache2.pm';
+readme_from 'lib/Test/Httpd/Apache2.pm';
 
 requires 'Class::Accessor::Lite';
 requires 'Test::TCP';
