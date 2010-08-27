@@ -16,7 +16,7 @@ use Time::HiRes qw(sleep);
 
 use constant PATH_SEP => $^O eq 'MSWin32' ? ';' : ':';
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 our %Defaults = (
     auto_start         => 1,

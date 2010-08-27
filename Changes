@@ -1,5 +1,8 @@
 Revision history for Perl extension Test::Httpd::Apache2
 
+0.05
+	- detect libphp5.so (does not use the standard mod_foo.so naming convention)
+
 0.04
 	- add Win32 support (thanks to mattn)
 	- detect "apache2" and "apxs2" for Debian / Ubuntu compatibility
