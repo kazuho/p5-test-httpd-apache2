@@ -36,8 +36,8 @@ $httpd->stop();
 ok ! $httpd->pid(), 'httpd should be down';
 
 # try to load module if has support for dso
-if (my @mods = @{$httpd->get_dynamic_modules}) {
-    $httpd->required_modules([ $mods[0] ]);
+if (my %mods = %{$httpd->get_dynamic_modules}) {
+    $httpd->required_modules([ (sort keys %mods)[0] ]);
     $httpd->start(); # will die on error
 }
 

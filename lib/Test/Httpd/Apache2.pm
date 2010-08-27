@@ -152,7 +152,7 @@ sub build_conf {
     my $self = shift;
     my $load_modules = do {
         my %static_mods = map { $_ => 1 } @{$self->get_static_modules};
-        my %dynamic_mods = map { $_ => 1 } @{$self->get_dynamic_modules};
+        my %dynamic_mods = %{$self->get_dynamic_modules};
         my @mods_to_load;
         my $httpd_ver = $self->get_httpd_version;
         for my $mod (@{$self->required_modules}) {
@@ -170,7 +170,7 @@ sub build_conf {
         }
         my $dso_path = $self->get_dso_path;
         $dso_path ? join('', map {
-            "LoadModule ${_}_module $dso_path/mod_${_}.so\n"
+            "LoadModule ${_}_module $dso_path/$dynamic_mods{$_}\n"
         } @mods_to_load) : '';
     };
     my $conf = << "EOT";
@@ -255,14 +255,14 @@ sub get_dso_path {
 sub get_dynamic_modules {
     my $self = shift;
     return $self->{_dynamic_modules} ||= do {
-        my @mods;
+        my %mods;
         if (my $dir = $self->get_dso_path()) {
-            for my $n (glob "$dir/mod_*.so") {
-                $n =~ m|/mod_(.*?)\.so$|
-                    and push @mods, $1;
+            for my $n (glob "$dir/*.so") {
+                $n =~ m{/((?:mod_|lib)([^/]+?)\.so)$}
+                    and $mods{$2} = $1;
             }
         }
-        \@mods;
+        \%mods;
     };
 }
 
