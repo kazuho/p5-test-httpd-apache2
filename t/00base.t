@@ -6,14 +6,13 @@ use LWP::Simple;
 
 use_ok('Test::Httpd::Apache2');
 
-{ # skip if httpd cannot be found
-    no warnings qw(once);
-    my @paths = (
-        split(':', $ENV{PATH}),
-        @{$Test::Httpd::Apache2::Defaults{search_paths}},
-    );
-    if (! grep { -x "$_/httpd" || -x "$_/httpd.exe" || -x  "$_/apache2" } @paths) {
-        warn "httpd not found, skipping actual tests";
+# skip if httpd cannot be found
+if ($^O ne 'MSWin32') {
+    if ((find_prog('httpd') && find_prog('apxs'))
+            || (find_prog('apache2') && find_prog('apxs2'))) {
+        # ok
+    } else {
+        warn "httpd or apxs not found, skipping actual tests";
         goto DONE_TESTING;
     }
 }
@@ -45,3 +44,13 @@ undef $httpd;
 
 DONE_TESTING:
 done_testing;
+
+sub find_prog {
+    no warnings qw(once);
+    my $prog = shift;
+    my @paths = (
+        split(':', $ENV{PATH}),
+        @{$Test::Httpd::Apache2::Defaults{search_paths}},
+    );
+    return scalar(grep { -x "$_/$prog" } @paths) != 0;
+}
