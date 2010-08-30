@@ -115,10 +115,10 @@ sub start {
             Proto    => 'tcp',
         ) and last;
         if (waitpid($pid, WNOHANG) == $pid) {
-            die "httpd failed to start, exitted with rc=$?";
             if (open my $fh, '<', "@{[$self->tmpdir]}/error_log") {
                 print STDERR do { local $/; join '', <$fh> };
             }
+            die "httpd failed to start, exitted with rc=$?";
         }
         sleep 0.1;
     }
