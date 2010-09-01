@@ -1,5 +1,9 @@
 Revision history for Perl extension Test::Httpd::Apache2
 
+0.07
+	- print the contents of error_log when httpd fails to start
+	- check the existence of httpd.exe on win32 (in tests)
+
 0.06
 	- check the existence of apxs before running tests (to reduce false-positive failures on cpantesters)
 
