@@ -19,11 +19,12 @@ if ($^O eq 'MSWin32'
 
 # start httpd
 my $httpd = Test::Httpd::Apache2->new(
-    custom_conf => << 'EOT',
-
-DocumentRoot "t/assets/htdocs"
-
-EOT
+    custom_conf => join(
+        "\n",
+        q(DocumentRoot t/assets/htdocs),
+        ($^O eq 'darwin' && $< eq 0 ? ('User nobody') : ()),
+        '',
+    ),
 );
 
 ok $httpd, 'spawn httpd';
