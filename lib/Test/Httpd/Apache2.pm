@@ -16,7 +16,7 @@ use Time::HiRes qw(sleep);
 
 use constant PATH_SEP => $^O eq 'MSWin32' ? ';' : ':';
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 our %Defaults = (
     auto_start       => 1,
@@ -348,6 +348,11 @@ the instance method stops the httpd server
 =head1 COPYRIGHT
 
 Copyright (C) 2010 Cybozu Labs, Inc.  Written by Kazuho Oku.
+
+=head1 THANKS TO
+
+Tatsuhiko Miyagawa
+mattn
 
 =head1 LICENSE
 

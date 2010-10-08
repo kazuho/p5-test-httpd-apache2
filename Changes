@@ -1,5 +1,8 @@
 Revision history for Perl extension Test::Httpd::Apache2
 
+0.08
+	- compatibility improvements on various platforms including MSWin32
+
 0.07
 	- print the contents of error_log when httpd fails to start
 	- check the existence of httpd.exe on win32 (in tests)
