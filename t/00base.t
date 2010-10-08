@@ -22,8 +22,6 @@ my $httpd = Test::Httpd::Apache2->new(
     custom_conf => join(
         "\n",
         q(DocumentRoot t/assets/htdocs),
-        ($< == 0 ? ('User nobody') : ()),
-        '',
     ),
 );
 
