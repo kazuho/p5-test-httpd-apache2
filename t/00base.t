@@ -22,7 +22,7 @@ my $httpd = Test::Httpd::Apache2->new(
     custom_conf => join(
         "\n",
         q(DocumentRoot t/assets/htdocs),
-        ($^O eq 'darwin' && $< eq 0 ? ('User nobody') : ()),
+        ($< == 0 ? ('User nobody') : ()),
         '',
     ),
 );
