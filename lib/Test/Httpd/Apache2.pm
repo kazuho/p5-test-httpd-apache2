@@ -179,7 +179,7 @@ PidFile @{[$self->tmpdir]}/httpd.pid
 <IfModule !mpm_winnt_module>
   LockFile @{[$self->tmpdir]}/httpd.lock
 </IfModule>
-@{[ $< == 0 ? "User nobody" : ()]}
+@{[ $^O ne 'MSWin32' && $< == 0 ? "User nobody" : ()]}
 ErrorLog @{[$self->tmpdir]}/error_log
 Listen @{[$self->listen]}
 $load_modules
