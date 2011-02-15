@@ -1,5 +1,8 @@
 Revision history for Perl extension Test::Httpd::Apache2
 
+0.09
+	- fix incompatibility with RHEL5 (and variants that do not return os name by httpd -v)
+
 0.08
 	- compatibility improvements on various platforms including MSWin32
 

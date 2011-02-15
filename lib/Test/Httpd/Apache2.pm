@@ -16,7 +16,7 @@ use Time::HiRes qw(sleep);
 
 use constant PATH_SEP => $^O eq 'MSWin32' ? ';' : ':';
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 
 our %Defaults = (
     auto_start       => 1,
@@ -207,7 +207,7 @@ sub get_httpd_version {
     return $self->{_httpd_version} ||= do {
         my $lines = $self->_read_cmd($self->httpd, '-v')
             or die 'dying due to previous error';
-        $lines =~ m{Apache\/([0-9\.]+) }
+        $lines =~ m{Apache\/([0-9]+\.[0-9\.]+)}
             or die q{failed to parse out version number from the output of "httpd -v"};
         $1;
     };
